@@ -1,0 +1,67 @@
+name: daily-quota-report
+on:
+  schedule:
+    - cron: "30 0 * * 1-5"   # UTC 00:30 = 北京时间 08:30，仅周一至周五
+  workflow_dispatch:          # 手动触发（测试用，跳过交易日检查）
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装中文字体与依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+          pip install -r requirements.txt
+
+      - name: 交易日检查（节假日/调休自动跳过）
+        id: tradeday
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=$(python trading_day.py)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 抓取并生成卡片与文案
+        if: steps.tradeday.outputs.ok == '1'
+        run: python main.py
+
+      - name: 合成播报视频（TTS 失败不阻塞）
+        if: steps.tradeday.outputs.ok == '1'
+        continue-on-error: true
+        run: python video.py
+
+      - name: 推送到手机（企业微信 / Telegram）
+        if: steps.tradeday.outputs.ok == '1'
+        env:
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python notify.py
+
+      - name: 保存当日快照（供次日对比"放宽/收紧"）
+        if: steps.tradeday.outputs.ok == '1'
+        run: |
+          git config user.name "quota-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/
+          git commit -m "snapshot $(date +%F)" || echo "no changes"
+          git push
+
+      - uses: actions/upload-artifact@v4
+        if: steps.tradeday.outputs.ok == '1'
+        with:
+          name: report-${{ github.run_id }}
+          path: output/
+          retention-days: 14

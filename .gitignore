@@ -1,0 +1,7 @@
+# 每日产物（CI 走 artifact + IM 推送，不入库；data/ 快照需要入库供次日对比）
+output/
+debug/
+
+__pycache__/
+*.pyc
+*.bak
