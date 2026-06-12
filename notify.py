@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-半自动发布的"最后一公里"：把当日卡片、文案、视频推送到手机，
-人工花两分钟转发到微博 / 小红书 / 抖音 / B站。
+半自动发布的"最后一公里"：把当日素材按三类推送到手机——
+①纯文字（通用文案）②纯图片（完整名单长图）③纯视频（封面图+视频），
+人工花两分钟转发到各平台。
 
 支持两个通道，配了哪个环境变量就推哪个（GitHub Secrets 注入）：
   WECOM_WEBHOOK   企业微信群机器人 webhook 完整 URL
@@ -102,8 +103,7 @@ def main():
     card = ROOT / "output" / f"card_{d}.png"
     cover = ROOT / "output" / f"cover_{d}.png"
     video = ROOT / "output" / f"video_{d}.mp4"
-    weibo = ROOT / "output" / f"weibo_{d}.txt"
-    xhs = ROOT / "output" / f"xhs_{d}.txt"
+    text = ROOT / "output" / f"text_{d}.txt"
     snap = ROOT / "data" / f"{d}.json"
 
     rows = json.loads(snap.read_text(encoding="utf-8")) if snap.exists() else []
@@ -113,8 +113,8 @@ def main():
     summary = (
         f"📊 {date.month}月{date.day}日 额度日报已生成\n"
         f"可买 {buyable}/{len(rows)} 只，较昨日变化 {changed} 条\n"
-        f"——以下依次为：长图卡片 / 播报视频 / 微博文案 / 小红书文案，"
-        f"请转发到各平台"
+        f"——以下三类素材：①纯文字（文案）②纯图片（完整名单长图）"
+        f"③纯视频（封面图+视频）"
     )
 
     webhook = os.environ.get("WECOM_WEBHOOK", "").strip()
@@ -124,28 +124,27 @@ def main():
         print("未配置 WECOM_WEBHOOK 或 TG_BOT_TOKEN/TG_CHAT_ID，跳过推送")
         return
 
-    weibo_txt = weibo.read_text(encoding="utf-8") if weibo.exists() else ""
-    xhs_txt = xhs.read_text(encoding="utf-8") if xhs.exists() else ""
+    text_txt = text.read_text(encoding="utf-8") if text.exists() else ""
 
     if webhook:
         wecom_text(webhook, summary)
-        if cover.exists():
-            wecom_image(webhook, cover)
+        # ① 纯文字
+        if text_txt:
+            wecom_text(webhook, "【纯文字】\n" + text_txt)
+        # ② 纯图片：完整名单长图
         if card.exists():
             wecom_image(webhook, card)
+        # ③ 纯视频：封面图 + 视频文件
+        if cover.exists():
+            wecom_image(webhook, cover)
         if video.exists():
             wecom_file(webhook, video)
-        if weibo_txt:
-            wecom_text(webhook, "【微博文案】\n" + weibo_txt)
-        if xhs_txt:
-            wecom_text(webhook, "【小红书文案】\n" + xhs_txt)
         print("已推送到企业微信")
 
     if tg_token and tg_chat:
         tg_send(tg_token, tg_chat,
-                summary + "\n\n【微博文案】\n" + weibo_txt
-                + "\n\n【小红书文案】\n" + xhs_txt,
-                [cover, card],
+                summary + "\n\n【纯文字】\n" + text_txt,
+                [card, cover],
                 video if video.exists() else None)
         print("已推送到 Telegram")
 

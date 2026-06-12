@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 播报视频 V2（抖音 / B站，1080x1920 竖版）：
-  5 幕大字分镜替代长图慢滚 —— 封面 → 各指数档位榜 → 较昨日变动 → 落版。
+  6 幕大字分镜 —— 封面 → 各指数档位榜 → 较昨日变动 → 落版 → 完整名单慢滚。
   每幕一张 PNG 帧（card.render_scene_*），edge-tts 分段配音，
   幕时长 = 该段配音时长 + 0.5s，ffmpeg 逐幕合成后 concat 拼接。
 
@@ -28,6 +28,8 @@ OUT = ROOT / "output"
 VOICE = "zh-CN-XiaoxiaoNeural"
 PAD = 0.5          # 每幕配音后的留白秒数
 MIN_DUR = 2.8      # 每幕最短时长
+SCROLL_SPEED = 240          # 名单幕滚动速度（px/s）
+SCROLL_PAD_BG = "0x06231A"  # 与 card.C_BG_TOP 一致
 
 
 def find_ffmpeg() -> str:
@@ -115,9 +117,15 @@ def build_scenes(rows, date: datetime.date):
 
     scenes.append({
         "kind": "outro",
-        "narration": "完整名单见图文版。数据来自天天基金及基金公司公告，不构成投资建议。",
-        "subtitle": "完整名单见图文版 · 明早 8:30 见",
+        "narration": "完整名单见下一幕。数据来自天天基金及基金公司公告，不构成投资建议。",
+        "subtitle": "完整名单见下一幕 · 每个交易日更新",
         "default_dur": 5.0,
+    })
+    scenes.append({
+        "kind": "list",
+        "narration": "完整名单如下，可随时暂停查看。",
+        "subtitle": "完整名单 · 可暂停查看",
+        "default_dur": 12.0,
     })
     return scenes
 
@@ -133,6 +141,10 @@ def render_frames(scenes, rows, date, tmp: pathlib.Path):
                                     str(png), i, n, s["subtitle"])
         elif s["kind"] == "changes":
             card.render_scene_changes(rows, str(png), i, n, s["subtitle"])
+        elif s["kind"] == "list":
+            png = OUT / f"card_{date.isoformat()}.png"   # 直接复用完整名单长图
+            if not png.exists():
+                card.render_card(rows, date, str(png))
         else:
             card.render_scene_outro(str(png), i, n, s["subtitle"])
         s["png"] = png
@@ -183,8 +195,18 @@ def render_scene_mp4(ffmpeg, s, dur, out_mp4):
         cmd += ["-i", str(s["mp3"])]
     else:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
+    if s.get("scroll", 0) > 0:
+        # 完整名单长图慢滚：首尾各停 1s，中间匀速滚到底
+        roll = max(dur - 2.0, 0.1)
+        vf = (f"crop=1080:1920:0:'(in_h-1920)*min(max((t-1)/{roll:.2f},0),1)',"
+              "format=yuv420p")
+    elif s["kind"] == "list":
+        # 长图不足一屏（极端情况），底色补齐居中
+        vf = f"pad=1080:1920:0:(oh-ih)/2:color={SCROLL_PAD_BG},format=yuv420p"
+    else:
+        vf = "format=yuv420p"
     cmd += [
-        "-filter_complex", "[0:v]format=yuv420p[v];[1:a]apad[a]",
+        "-filter_complex", f"[0:v]{vf}[v];[1:a]apad[a]",
         "-map", "[v]", "-map", "[a]",
         "-t", f"{dur:.2f}", "-r", "30",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
@@ -221,6 +243,11 @@ def main():
             dur = max(media_duration(ffmpeg, s["mp3"]) + PAD, MIN_DUR)
         else:
             dur = s["default_dur"]
+        if s["kind"] == "list":
+            from PIL import Image
+            s["scroll"] = max(Image.open(s["png"]).height - 1920, 0)
+            # 滚完名单所需时间（首尾各停 1s），与配音时长取较大者
+            dur = max(dur, s["scroll"] / SCROLL_SPEED + 2.0)
         mp4 = tmp / f"scene_{i}.mp4"
         render_scene_mp4(ffmpeg, s, dur, mp4)
         parts.append(mp4)

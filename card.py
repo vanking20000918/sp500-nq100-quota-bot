@@ -1018,7 +1018,7 @@ def render_scene_outro(out_path, idx, n, subtitle):
     _gold_bar(img, bx, y + 6, 12, 48)
     d.text((bx + 30, y), brand, font=bf, fill=C_GOLD)
     y += 130
-    for line in ("每个交易日 8:30", "更新额度"):
+    for line in ("每个交易日", "更新额度"):
         lf = _font(76)
         d.text(((VW - _tw(line, lf)) / 2, y), line, font=lf, fill=C_TEXT)
         y += 110
