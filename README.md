@@ -1,37 +1,44 @@
 # 标普500&纳斯达克100 额度哨兵
 
 每个 A 股交易日抓取标普500 / 纳指100 全部场外被动指数基金（52只人民币份额）的
-申购限额，生成发帖用的卡片长图、各平台文案和 30 秒 TTS 播报视频，
-推送到手机后人工花两分钟转发到微博 / 小红书 / 抖音 / B站。
+申购限额，生成三类发帖素材——纯文字（通用文案）、纯图片（完整名单长图）、
+纯视频（封面图 + 6 幕 TTS 播报视频，末幕滚动完整名单）——
+推送到手机后人工花两分钟转发到各平台。
 
 ## 快速开始（本地）
 
 ```bash
 pip install -r requirements.txt
-python main.py --mock   # 先用模拟数据跑通流程
+python main.py --mock   # 先用模拟数据跑通流程（注意会覆盖当日 data/ 快照）
 python main.py          # 真实抓取（需能访问天天基金）
-python video.py         # 合成 30 秒播报视频（edge-tts 配音，需联网）
+python video.py         # 合成播报视频（edge-tts 配音，需联网）
 ```
 
-产出在 `output/`：
-- `card_YYYY-MM-DD.png` — 额度卡片长图（小红书 / 微博 / B站动态直接发）
-- `weibo_*.txt` / `xhs_*.txt` — 对应平台文案
-- `video_*.mp4` — 1080x1920 竖版播报视频（抖音 / B站）
+产出在 `output/`，对应三类发布素材：
+- `text_YYYY-MM-DD.txt` — 通用文案，不分平台
+- `card_YYYY-MM-DD.png` — 完整名单长图（额度档位聚类，暂停基金折叠）
+- `cover_YYYY-MM-DD.png` + `video_*.mp4` — 视频封面图 + 1080x1920 竖版
+  播报视频（6 幕分镜：封面 → 标普500 → 纳指100 → 变动 → 落版 → 完整名单慢滚）
+
+大数字字体用 `assets/fonts/` 下的 Barlow Condensed（OFL 开源），
+缺失时自动回退中文粗体，不影响运行。
 
 每日快照存在 `data/`，第二天自动对比生成「放宽 / 收紧」标记。
 
 ## 部署到 GitHub Actions（全自动生成 + 半自动发布）
 
 1. 推送本仓库到 GitHub（Settings → Actions 确认启用）。
-2. `.github/workflows/daily.yml` 已配置北京时间每个工作日 08:30 运行，
-   并用 `trading_day.py` 自动跳过法定节假日（chinese-calendar 数据）。
+2. `.github/workflows/daily.yml` 已配置每个工作日 UTC 00:17（北京时间约 08:17）
+   运行，并用 `trading_day.py` 自动跳过法定节假日（chinese-calendar 数据）。
+   注意 GitHub Actions 的 schedule 不保证准点，高峰期可能延迟数小时；
+   cron 已避开整半点，若仍长期严重延迟可改用外部定时器调 workflow_dispatch。
 3. 在仓库 Settings → Secrets and variables → Actions 配置推送通道（二选一或都配）：
    - `WECOM_WEBHOOK`：企业微信群机器人 webhook 完整 URL
      （企业微信群 → 右键 → 添加群机器人，个人可注册免费企业）
    - `TG_BOT_TOKEN` + `TG_CHAT_ID`：Telegram 机器人 token 与会话 ID
-4. 每天 08:30 后手机会收到：长图、播报视频、微博文案、小红书文案，
-   转发即完成发布。产物同时上传为 Actions artifact（保留14天），
-   当日快照自动 commit 回 `data/` 供次日对比。
+4. 运行后手机会依次收到三类素材：①纯文字文案 ②完整名单长图
+   ③封面图 + 播报视频，转发即完成发布。产物同时上传为 Actions
+   artifact（保留14天），当日快照自动 commit 回 `data/` 供次日对比。
 
 手动测试：仓库 Actions 页面 → daily-quota-report → Run workflow
 （手动触发会跳过交易日检查）。
