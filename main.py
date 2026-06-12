@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-每日主流程：
+每日主流程 V2：
   python main.py          # 真实抓取
   python main.py --mock   # 用模拟数据跑通流程
 
 产出（output/ 目录）：
-  card_YYYY-MM-DD.png      额度卡片长图
+  cover_YYYY-MM-DD.png     封面卡（图1，信息流钩子）★新增
+  card_YYYY-MM-DD.png      额度详情长图（图2，档位聚类版）
   weibo_YYYY-MM-DD.txt     微博文案
   xhs_YYYY-MM-DD.txt       小红书文案
 同时把当日快照写入 data/，用于次日对比"放宽/收紧"。
@@ -107,6 +108,7 @@ def write_copy(rows, date, changes_exist):
     )
     xhs = (
         f"{date_str} 美股指数基金额度日报📋 {headline}\n\n"
+        "👉 图1看今日重点，图2有完整52只名单，建议收藏\n\n"
         f"{body_txt}\n\n"
         "⬆️=较昨日放宽 ⬇️=收紧\n"
         "每天开盘前更新，定投党建议收藏～\n"
@@ -135,17 +137,23 @@ def main():
     yesterday = load_snapshot(today - datetime.timedelta(days=1))
     for r in rows:
         r["change"] = diff_change(r, yesterday)
+        prev = yesterday.get(r["code"])
+        # 昨日限额随行带上，卡片/视频展示"100元 → 10元"用
+        r["prev_limit"] = prev.get("limit") if prev else None
     changes_exist = any(r["change"] in ("up", "down") for r in rows)
 
     # 当日快照
     (DATA / f"{today.isoformat()}.json").write_text(
         json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    cover_path = OUT / f"cover_{today.isoformat()}.png"
     card_path = OUT / f"card_{today.isoformat()}.png"
+    card.render_cover(rows, today, str(cover_path))
     card.render_card(rows, today, str(card_path))
     write_copy(rows, today, changes_exist)
 
-    print(f"完成：{card_path}")
+    print(f"完成：{cover_path}")
+    print(f"      {card_path}")
     print(f"      {OUT / f'weibo_{today.isoformat()}.txt'}")
     print(f"      {OUT / f'xhs_{today.isoformat()}.txt'}")
 

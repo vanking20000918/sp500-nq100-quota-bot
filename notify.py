@@ -75,9 +75,11 @@ def tg_api(token: str, method: str, **kwargs):
 
 
 def tg_send(token: str, chat: str, text: str,
-            photo: pathlib.Path | None, video: pathlib.Path | None):
+            photos: list[pathlib.Path], video: pathlib.Path | None):
     tg_api(token, "sendMessage", data={"chat_id": chat, "text": text[:4000]})
-    if photo and photo.exists():
+    for photo in photos:
+        if not photo.exists():
+            continue
         with photo.open("rb") as f:
             r = tg_api(token, "sendPhoto",
                        data={"chat_id": chat}, files={"photo": f})
@@ -98,6 +100,7 @@ def main():
             else datetime.date.today())
     d = date.isoformat()
     card = ROOT / "output" / f"card_{d}.png"
+    cover = ROOT / "output" / f"cover_{d}.png"
     video = ROOT / "output" / f"video_{d}.mp4"
     weibo = ROOT / "output" / f"weibo_{d}.txt"
     xhs = ROOT / "output" / f"xhs_{d}.txt"
@@ -126,6 +129,8 @@ def main():
 
     if webhook:
         wecom_text(webhook, summary)
+        if cover.exists():
+            wecom_image(webhook, cover)
         if card.exists():
             wecom_image(webhook, card)
         if video.exists():
@@ -140,7 +145,7 @@ def main():
         tg_send(tg_token, tg_chat,
                 summary + "\n\n【微博文案】\n" + weibo_txt
                 + "\n\n【小红书文案】\n" + xhs_txt,
-                card if card.exists() else None,
+                [cover, card],
                 video if video.exists() else None)
         print("已推送到 Telegram")
 
