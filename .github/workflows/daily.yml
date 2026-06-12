@@ -1,7 +1,7 @@
 name: daily-quota-report
 on:
   schedule:
-    - cron: "30 0 * * 1-5"   # UTC 00:30 = 北京时间 08:30，仅周一至周五
+    - cron: "17 0 * * 1-5"   # UTC 00:17 ≈ 北京时间 08:17，错开整点调度高峰，仅周一至周五
   workflow_dispatch:          # 手动触发（测试用，跳过交易日检查）
 
 permissions:
