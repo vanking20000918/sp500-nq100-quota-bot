@@ -28,10 +28,21 @@ python video.py         # 合成播报视频（edge-tts 配音，需联网）
 ## 部署到 GitHub Actions（全自动生成 + 半自动发布）
 
 1. 推送本仓库到 GitHub（Settings → Actions 确认启用）。
-2. `.github/workflows/daily.yml` 已配置每个工作日 UTC 00:17（北京时间约 08:17）
-   运行，并用 `trading_day.py` 自动跳过法定节假日（chinese-calendar 数据）。
-   注意 GitHub Actions 的 schedule 不保证准点，高峰期可能延迟数小时；
-   cron 已避开整半点，若仍长期严重延迟可改用外部定时器调 workflow_dispatch。
+2. **调度方式**：`.github/workflows/daily.yml` 以**外部触发为主**。GitHub 内置的
+   schedule cron 不保证准点（高峰期常延迟数十分钟甚至整批丢弃），因此改由一个你可控的
+   外部调度器（cron-job.org / VPS crontab / 云函数等）每工作日北京 08:05 调用 GitHub API
+   派发 `repository_dispatch`（事件类型 `daily-trigger`），触发延迟从数十分钟降到几秒。
+   workflow 内仍保留少量周一至周五的 schedule 槽位作**兜底**，外部调度器宕机时接管。
+   两条触发路径都走 `trading_day.py` 交易日判断 + 远端判重（当日已生成则跳过），幂等安全。
+
+   **配置外部触发**（以 cron-job.org 为例）：
+   - GitHub → Settings → Developer settings → **Fine-grained token**，授权本仓库
+     `Contents: Read and write`，复制 `github_pat_...`。
+   - cron-job.org 新建任务：URL
+     `https://api.github.com/repos/<owner>/<repo>/dispatches`，方法 `POST`，
+     Header `Authorization: Bearer <PAT>`、`Accept: application/vnd.github+json`，
+     Body `{"event_type":"daily-trigger"}`，时区 Asia/Shanghai、周一至五 08:05 触发。
+   - 成功返回 HTTP 204；到仓库 Actions 页可见来源 `repository_dispatch` 的运行。
 3. 在仓库 Settings → Secrets and variables → Actions 配置推送通道（二选一或都配）：
    - `WECOM_WEBHOOK`：企业微信群机器人 webhook 完整 URL
      （企业微信群 → 右键 → 添加群机器人，个人可注册免费企业）
